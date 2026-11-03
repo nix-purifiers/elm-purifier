@@ -61,14 +61,18 @@ echo "== publish checks the documentation against the Nix build"
 (cd "$work/package" && "$cli" publish --check)
 
 echo "== a changed elm.json is refused with the command to run"
-sed -i 's/"1.0.0"/"1.0.1"/' "$work/package/elm.json"
+sed 's/"1.0.0"/"1.0.1"/' "$work/package/elm.json" >"$work/elm.json"
+mv "$work/elm.json" "$work/package/elm.json"
 (cd "$work/package" && PATH="$work/package/elm-stuff/elm-purifier/bin:$PATH" "$cli" prefetch 2>&1 || true) |
   grep -q 'run `elm-purifier lock`' || fail "prefetch did not name the command that writes the lockfile"
 
 echo "== a tampered hash names the lockfile and the command to run"
 cp -r tests/fixtures/app "$work/tampered"
 chmod -R u+w "$work/tampered"
-sed -i '0,/"sha256-/s//"sha256-AAAA/' "$work/tampered/elm-purifier.lock.json"
+# Tampers the first hash only.
+awk '!done && sub(/"sha256-/, "\"sha256-AAAA") { done = 1 } 1' \
+  "$work/tampered/elm-purifier.lock.json" >"$work/tampered.lock.json"
+mv "$work/tampered.lock.json" "$work/tampered/elm-purifier.lock.json"
 (cd "$work/tampered" && "$cli" prefetch 2>&1 || true) |
   grep -q 'run `elm-purifier lock`' || fail "a tampered hash gave no lock hint"
 

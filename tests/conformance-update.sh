@@ -39,7 +39,8 @@ cp "$work/lock.json" "$work/lock-updated.json"
 cmp "$work/lock.json" "$work/lock-updated.json"
 
 # Named packages: pin elm/json back, then update only it.
-sed -i 's|"elm/json": "[0-9.]*"|"elm/json": "1.1.2"|' elm.json
+sed 's|"elm/json": "[0-9.]*"|"elm/json": "1.1.2"|' elm.json >elm.json.new
+mv elm.json.new elm.json
 "$cli" lock --lockfile "$work/lock.json"
 "$cli" update --lockfile "$work/lock.json" elm/json
 grep -q '"elm/json": "1.1.4"' elm.json
