@@ -347,6 +347,25 @@ in
 `result/docs.json` is the documentation of the package, and the second build
 runs its tests.
 
+## Browser resource projections
+
+Compiled application packages expose resource/web/Java-resource projections of
+their `<Module>.js` output. Package documentation exposes the same projections
+for `docs.json`. Use `.directory`, `.documentRoot`, or `.classPath` on the
+selected view. Compiler caches and source trees are excluded.
+
+Set `webjars = { "Report.Json" = { artifactId = "elm-report";
+version = "1.0.0"; }; };` on `buildElmProject` to additionally publish that
+compiled module through immutable Maven/Ivy WebJar views. `groupId` defaults
+to `org.webjars.npm`. Only application entry modules may be selected. Java
+resources in the plain JAR keep native paths; WebJars use
+`META-INF/resources/webjars/<artifactId>/<sourceVersion>/`.
+
+The check runs an actual compiled Elm worker with Node, serves/loads the
+compiled bytes through ordinary HTTP and Java, and resolves the WebJar with
+offline Gradle. It does not execute a browser or supply application-specific
+JavaScript ports, DOM state, or other external assets.
+
 ## Credits
 
 The purifier idea was inspired by nixcloud's

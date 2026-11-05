@@ -161,6 +161,11 @@ let
   };
 in
 {
+  documentation-resources = import ./resource-consumer.nix {
+    inherit pkgs;
+    projection = package.packages.docs.projections.resources;
+  };
+  browser-projections = import ./browser-projections.nix { inherit pkgs build; };
   inherit cli;
 
   toolchains =
