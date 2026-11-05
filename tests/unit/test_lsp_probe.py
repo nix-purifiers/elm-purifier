@@ -38,6 +38,15 @@ FAKE_SERVER = textwrap.dedent(
         time.sleep(3600)
     if mode == "always-hang":
         time.sleep(3600)
+    if mode == "close-output":
+        os.close(sys.stdout.fileno())
+        time.sleep(3600)
+    if mode == "unframed-output":
+        open(marker, "w").close()
+        while True:
+            sys.stdout.buffer.write(b"x" * 1024)
+            sys.stdout.buffer.flush()
+            time.sleep(0.001)
 
     def read():
         headers = {}
@@ -78,6 +87,25 @@ class Probe(unittest.TestCase):
         probe.START_WAIT = 2
         probe.DIAGNOSTICS_WAIT = 5
         probe.ATTEMPTS = 3
+
+    def test_closed_output_from_a_live_server_is_bounded(self):
+        probe.ATTEMPTS = 1
+        probe.START_WAIT = 1
+        started = probe.time.monotonic()
+        status, output, errors = self.run_probe("close-output")
+        self.assertEqual(status, 1)
+        self.assertIn("closed standard output without exiting", errors)
+        self.assertLess(probe.time.monotonic() - started, 3)
+
+    def test_continuous_unframed_output_respects_the_deadline(self):
+        probe.ATTEMPTS = 1
+        probe.START_WAIT = 1
+        started = probe.time.monotonic()
+        status, output, errors = self.run_probe("unframed-output")
+        self.assertEqual(status, 1)
+        self.assertTrue((self.directory / "marker").exists())
+        self.assertIn("did not answer initialize", errors)
+        self.assertLess(probe.time.monotonic() - started, 3)
 
     def run_probe(self, mode):
         command = [sys.executable, "-I", str(self.directory / "server.py"), str(self.directory / "marker"), mode]
