@@ -48,6 +48,10 @@ class Messages:
         """The next message, or None when none arrives before `until`.
         Raises EOFError when the server closed its output."""
         while True:
+            # Continuous non-protocol output must not keep a readable pipe
+            # alive past the same deadline as an otherwise silent server.
+            if time.monotonic() >= until:
+                return None
             header_end = self.buffer.find(b"\r\n\r\n")
             if header_end >= 0:
                 headers = {}
@@ -60,7 +64,7 @@ class Messages:
                     message = json.loads(self.buffer[start:end])
                     self.buffer = self.buffer[end:]
                     return message
-            if not select.select([self.fd], [], [], max(0, until - time.time()))[0]:
+            if not select.select([self.fd], [], [], max(0, until - time.monotonic()))[0]:
                 return None
             chunk = os.read(self.fd, 65536)
             if not chunk:
@@ -79,24 +83,29 @@ def attempt(command, path):
             send(proc, {"jsonrpc": "2.0", "id": 1, "method": "initialize",
                         "params": {"processId": os.getpid(), "rootUri": root, "capabilities": {},
                                    "workspaceFolders": [{"uri": root, "name": "project"}]}})
-            started = time.time()
+            started = time.monotonic()
             until = started + START_WAIT
             initialized = False
             received = []
             reason = "no diagnostics arrived"
             messages = Messages(proc)
-            while time.time() < until:
+            while time.monotonic() < until:
                 try:
                     message = messages.next(until)
                 except EOFError:
-                    reason = f"the server exited with status {proc.wait()}"
+                    try:
+                        status = proc.wait(timeout=0.1)
+                    except subprocess.TimeoutExpired:
+                        reason = "the server closed standard output without exiting"
+                    else:
+                        reason = f"the server exited with status {status}"
                     break
                 if message is None:
                     break
                 received.append(message.get("method") or f"response {message.get('id')}")
                 if message.get("id") == 1 and not initialized:
                     initialized = True
-                    until = time.time() + DIAGNOSTICS_WAIT
+                    until = time.monotonic() + DIAGNOSTICS_WAIT
                     send(proc, {"jsonrpc": "2.0", "method": "initialized", "params": {}})
                     send(proc, {"jsonrpc": "2.0", "method": "textDocument/didOpen",
                                 "params": {"textDocument": {"uri": uri, "languageId": "elm", "version": 1,
@@ -113,11 +122,11 @@ def attempt(command, path):
             if not initialized and reason == "no diagnostics arrived":
                 reason = f"the server did not answer initialize within {START_WAIT} seconds"
             stderr.seek(0)
-            return (f"{reason} (after {time.time() - started:.0f} seconds; received {received}; "
+            return (f"{reason} (after {time.monotonic() - started:.0f} seconds; received {received}; "
                     f"standard error: {stderr.read().decode(errors='replace').strip() or 'empty'})")
         finally:
             proc.kill()
-            proc.wait()
+            proc.wait(timeout=5)
 
 
 def main():
