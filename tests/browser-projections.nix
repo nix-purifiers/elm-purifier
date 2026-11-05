@@ -48,6 +48,7 @@ pkgs.runCommand "elm-browser-projections"
       }
     }
     GRADLE
-    gradle --offline --no-daemon verify
+    python ${./bounded-command.py} --timeout 300 -- gradle --offline --no-daemon --console=plain verify
+    echo "elm-browser-projections: Gradle exited; writing check output"
     touch $out
   ''
