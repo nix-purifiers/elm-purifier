@@ -36,6 +36,8 @@
   elmPackages,
   elm-purifier,
   purifier,
+  runCommand,
+  python3,
 }:
 {
   # The tree the project is in, as a path: the flake's own source, or a
@@ -44,6 +46,7 @@
   # source that is a derivation, such as fetchFromGitHub, would have to be
   # built first (import from derivation).
   src,
+  webjars ? { },
   # The directory of elm.json, relative to `src`. A project whose
   # source-directories reach outside its directory takes the enclosing tree
   # as `src` and its own directory here.
@@ -159,7 +162,7 @@ let
       // attrs
     );
 
-  applications = lib.mapAttrs (
+  rawApplications = lib.mapAttrs (
     module:
     { main }:
     mkBuild "elm-${module}" {
@@ -179,9 +182,32 @@ let
     }
   ) lock.outputs;
 
+  applications = lib.mapAttrs (
+    module: package:
+    package
+    // {
+      projections =
+        (purifier.resourceProjections {
+          producer = package;
+          roots."${module}.js" = "${module}.js";
+          inherit runCommand python3;
+        })
+        // lib.optionalAttrs (builtins.hasAttr module webjars) (
+          purifier.webjarProjections (
+            webjars.${module}
+            // {
+              producer = package;
+              assets = package;
+              inherit runCommand python3;
+            }
+          )
+        );
+    }
+  ) rawApplications;
+
   packageName = "elm-${lib.replaceStrings [ "/" ] [ "-" ] elmJson.name}-${elmJson.version}";
 
-  docs = mkBuild "${packageName}-docs" {
+  rawDocs = mkBuild "${packageName}-docs" {
     nativeBuildInputs = [ compiler ];
     buildPhase = ''
       runHook preBuild
@@ -194,6 +220,14 @@ let
       install -Dm644 "$TMPDIR/docs.json" "$out/docs.json"
       runHook postInstall
     '';
+  };
+
+  docs = rawDocs // {
+    projections = purifier.resourceProjections {
+      producer = rawDocs;
+      roots."docs.json" = "docs.json";
+      inherit runCommand python3;
+    };
   };
 
   release = mkBuild packageName {
@@ -232,6 +266,13 @@ let
   };
 
 in
+assert
+  builtins.all (module: builtins.hasAttr module lock.outputs) (builtins.attrNames webjars)
+  || throw "elm-purifier: webjars must name compiled application entry modules";
+assert
+  isApplication
+  || webjars == { }
+  || throw "elm-purifier: only compiled applications have WebJar projections";
 {
   packages = if isApplication then applications else { inherit docs; };
   release =
