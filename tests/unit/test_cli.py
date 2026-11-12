@@ -13,11 +13,13 @@ import importlib.util
 import io
 import json
 import os
+from pathlib import Path
 import struct
 import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 REPO = os.environ.get("ELM_PURIFIER_REPO", os.getcwd())
 # The command reads the lock format version from the Nix library.
@@ -41,6 +43,53 @@ TOOLCHAINS = {
     "0.19.2": {"elm": "/e2/bin/elm", "elm-test": {"2": "/t2/bin/elm-test"},
                "elm-test-offline-args": ["--offline"]},
 }
+
+
+class LockedEnvironment(unittest.TestCase):
+    def test_locked_solver_environment_is_scoped_and_overrides_proxy_bypasses(self):
+        original = {"HTTPS_PROXY": "http://caller-proxy:1234", "NO_PROXY": "*", "ELM_HOME": "/prepared"}
+        result = cli.locked_environment(original)
+        self.assertEqual(result["HTTPS_PROXY"], "http://127.0.0.1:9")
+        self.assertEqual(result["https_proxy"], result["HTTPS_PROXY"])
+        self.assertEqual(result["NO_PROXY"], "")
+        self.assertEqual(result["no_proxy"], "")
+        self.assertEqual(result["ELM_HOME"], "/prepared")
+        self.assertEqual(original["HTTPS_PROXY"], "http://caller-proxy:1234")
+        self.assertEqual(original["NO_PROXY"], "*")
+
+    def test_old_writable_home_is_refreshed_once_then_keeps_compiled_artifacts(self):
+        with tempfile.TemporaryDirectory() as directory:
+            project = Path(directory) / "project"
+            root = Path(directory) / "prefetch"
+            source = root / "home"
+            source.mkdir(parents=True)
+            (source / "registry.dat").write_text("locked registry")
+            home = Path(cli.state(str(project), "home"))
+            home.mkdir(parents=True)
+            (home / ".source").write_text(str(source.resolve()))
+            (home / "registry.dat").write_text("unlocked registry")
+            (home / "unlocked-package").write_text("old cached package")
+            self.assertEqual(Path(cli.install_home(str(project), str(root))), home)
+            self.assertEqual((home / "registry.dat").read_text(), "locked registry")
+            self.assertFalse((home / "unlocked-package").exists())
+            (home / "compiled-artifact").write_text("reusable")
+            cli.install_home(str(project), str(root))
+            self.assertEqual((home / "compiled-artifact").read_text(), "reusable")
+
+    def test_failed_cache_copy_preserves_the_previous_home(self):
+        with tempfile.TemporaryDirectory() as directory:
+            project = Path(directory) / "project"
+            root = Path(directory) / "prefetch"
+            (root / "home").mkdir(parents=True)
+            home = Path(cli.state(str(project), "home"))
+            home.mkdir(parents=True)
+            (home / ".source").write_text("old marker")
+            (home / "compiled-artifact").write_text("keep on failure")
+            with mock.patch.object(cli, "writable_copy", side_effect=OSError("copy failed")):
+                with self.assertRaisesRegex(OSError, "copy failed"):
+                    cli.install_home(str(project), str(root))
+            self.assertEqual((home / "compiled-artifact").read_text(), "keep on failure")
+            self.assertFalse(list(home.parent.glob(".home-*")))
 
 
 class Constraints(unittest.TestCase):
@@ -228,7 +277,9 @@ class ElmRaces(unittest.TestCase):
     Elm compiler, and not for any other failure."""
 
     def tool(self, script):
-        project = tempfile.mkdtemp()
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        project = os.path.join(directory.name, "project")
         os.makedirs(os.path.join(project, "elm-stuff"))
         return project, [sys.executable, "-I", "-c", script]
 

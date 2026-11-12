@@ -22,12 +22,12 @@ trap 'rm -rf "$work"' EXIT
 export NODE_USE_ENV_PROXY=1
 
 # Locks the project in $1 into the lockfile $2, and compares it with the
-# committed lockfile $3, or replaces that. A fourth argument, "seeded",
-# starts from the committed lockfile, which tells the lock run the entry
-# modules of a project that has more modules with a `main` than it builds.
+# committed lockfile $3, or replaces that. Start from the committed lock:
+# without it a package's ranges legitimately resolve newer releases, and
+# multi-entry applications lose their recorded entry-module selection.
 relock() {
   local project=$1 lockfile=$2 committed=$3
-  if [ "${4:-}" = seeded ]; then cp "$committed" "$lockfile"; fi
+  cp "$committed" "$lockfile"
   (cd "$project" && "$cli" lock --lockfile "$lockfile")
   if $write; then
     cp "$lockfile" "$committed"
@@ -54,7 +54,7 @@ relock "$work/fixtures/external" "$work/external.lock.json" tests/external/elm-p
 src=$(nix build --no-link --print-out-paths .#elm_0_19_1.src)
 cp -r "$src/reactor" "$work/reactor"
 chmod -R u+w "$work/reactor"
-relock "$work/reactor" "$work/reactor.lock.json" pkgs/elm_0_19_1/reactor.lock.json seeded
+relock "$work/reactor" "$work/reactor.lock.json" pkgs/elm_0_19_1/reactor.lock.json
 
 # The pinned commits are the ones tests/default.nix fetches.
 for project in rtfeldman/elm-spa-example/cb32acd73c3d346d0064e7923049867d8ce67193 \
