@@ -28,7 +28,7 @@ in
       elm-purifier = base.elm-purifier.overrideScope (
         self: _: {
           cli = self.callPackage ../../pkgs/cli {
-            version = builtins.replaceStrings [ "\n" ] [ "" ] (builtins.readFile ../../version.txt);
+            version = import ../../pkgs/version.nix;
             purifierSrc = closure-inputs.purifier;
           };
           buildElmProject = self.callPackage ../../nix/lib/build-elm-project.nix {
