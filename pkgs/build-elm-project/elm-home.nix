@@ -31,7 +31,7 @@
   fetchers ? { },
 }:
 let
-  read = import ./lock.nix { inherit lockFile elmJsonFile location; };
+  read = import ../../lib-overlays/default/lock.nix { inherit lockFile elmJsonFile location; };
   lock = purifier.checkLock read.lock;
   entries = purifier.entriesFor stdenvNoCC.hostPlatform.system lock;
   packages = map (entry: lib.removePrefix "${read.elmVersion}/packages/" entry.path) entries;

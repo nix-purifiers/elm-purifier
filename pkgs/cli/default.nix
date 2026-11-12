@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: MIT
 #
 # The elm-purifier command: bin/elm-purifier on nixpkgs' Python, with the
-# Elm toolchains it locks and runs with (nix/lib/toolchains.nix), the
+# Elm toolchains it locks and runs with (pkgs/build-elm-project/toolchains.nix), the
 # editor tools, the Nix library it realizes lockfiles with, the nixpkgs
 # that library builds with, and the shared purifier library pinned in this
 # flake's flake.lock.
@@ -24,7 +24,16 @@
   purifierSrc,
 }:
 let
-  toolchains = import ../../nix/lib/toolchains.nix { inherit elm-purifier elmPackages; };
+  runtime = lib.fileset.toSource {
+    root = ../..;
+    fileset = lib.fileset.unions [
+      ../../lib-overlays
+      ../../pkgs
+      ../../bin
+      ../../flake.lock
+    ];
+  };
+  toolchains = import ../build-elm-project/toolchains.nix { inherit elm-purifier elmPackages; };
   executables = lib.mapAttrs (_: toolchain: {
     elm = "${toolchain.elm}/bin/elm";
     elm-test = lib.mapAttrs (_: elm-test: "${elm-test}/bin/elm-test") toolchain.elm-test;
@@ -53,7 +62,7 @@ stdenvNoCC.mkDerivation {
       --set ELM_PURIFIER_ELM_FORMAT ${elmPackages.elm-format}/bin/elm-format \
       --set ELM_PURIFIER_ELM_LANGUAGE_SERVER ${elmPackages.elm-language-server}/bin/elm-language-server \
       --set ELM_PURIFIER_ELM_JSON ${elmPackages.elm-json}/bin/elm-json \
-      --set ELM_PURIFIER_LIB ${../../nix/lib} \
+      --set ELM_PURIFIER_LIB ${runtime}/pkgs/build-elm-project \
       --set ELM_PURIFIER_NIXPKGS ${path} \
       --set ELM_PURIFIER_PURIFIER ${purifierSrc} \
       --set ELM_PURIFIER_CLI "$out"
