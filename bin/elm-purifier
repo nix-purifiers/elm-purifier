@@ -339,6 +339,21 @@ def run_elm_tool(command, project, env):
         raise subprocess.CalledProcessError(status, command)
 
 
+def locked_environment(environment):
+    """Keep native package solvers on the prepared registry and package cache.
+
+    Elm has no offline make flag: a failed registry request selects its cached
+    registry. Scope this proxy setting to locked commands, leaving capture,
+    update and native publication able to contact their upstream services.
+    """
+    env = dict(environment)
+    for key in ("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "http_proxy", "https_proxy", "all_proxy"):
+        env[key] = "http://127.0.0.1:9"
+    env["NO_PROXY"] = env["no_proxy"] = ""
+    env["NODE_USE_ENV_PROXY"] = "1"
+    return env
+
+
 def run_tools(project, elm_json, toolchain, mains, tests, home, offline):
     """Runs what the Nix build runs, with ELM_HOME at `home`: the compiler
     on every entry module (or on the package's documentation), and
@@ -346,6 +361,8 @@ def run_tools(project, elm_json, toolchain, mains, tests, home, offline):
     NODE_USE_ENV_PROXY, which makes elm-test reach the network the way the
     compiler does."""
     env = dict(os.environ, ELM_HOME=home, NODE_USE_ENV_PROXY="1")
+    if offline:
+        env = locked_environment(env)
     elm = toolchain["elm"]
     with FreshElmStuff(project):
         if elm_json["type"] == "application":
@@ -666,10 +683,12 @@ def install_home(project, root):
     realized = os.path.realpath(os.path.join(root, "home"))
     home = state(project, "home")
     marker = os.path.join(home, ".source")
-    if not os.path.exists(marker) or open(marker).read() != realized:
+    # Old writable homes may contain a registry refreshed from the network.
+    identity = realized + "\nlocked-registry-v1\n"
+    if not os.path.exists(marker) or open(marker).read() != identity:
         writable_copy(realized, home)
         with open(marker, "w") as f:
-            f.write(realized)
+            f.write(identity)
     return home
 
 
@@ -744,7 +763,7 @@ def publish(path, check_only):
         subprocess.run(
             [toolchain["elm"], "make", f"--docs={docs}"],
             cwd=project,
-            env=dict(os.environ, ELM_HOME=home),
+            env=locked_environment(dict(os.environ, ELM_HOME=home)),
             check=True,
         )
         with open(docs, "rb") as f, open(os.path.join(release, "docs.json"), "rb") as g:
@@ -847,6 +866,7 @@ def run_tool(name, invoked, args):
         if key not in ("ELM_PURIFIER_TOOL", "ELM_PURIFIER_TOOL_PATH")
     }
     env["ELM_HOME"] = home
+    env = locked_environment(env)
     if name == "elm":
         command = [toolchain["elm"], *args]
     elif name == "elm-test":

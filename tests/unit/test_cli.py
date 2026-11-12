@@ -13,6 +13,7 @@ import importlib.util
 import io
 import json
 import os
+from pathlib import Path
 import struct
 import subprocess
 import sys
@@ -41,6 +42,38 @@ TOOLCHAINS = {
     "0.19.2": {"elm": "/e2/bin/elm", "elm-test": {"2": "/t2/bin/elm-test"},
                "elm-test-offline-args": ["--offline"]},
 }
+
+
+class LockedEnvironment(unittest.TestCase):
+    def test_locked_solver_environment_is_scoped_and_overrides_proxy_bypasses(self):
+        original = {"HTTPS_PROXY": "http://caller-proxy:1234", "NO_PROXY": "*", "ELM_HOME": "/prepared"}
+        result = cli.locked_environment(original)
+        self.assertEqual(result["HTTPS_PROXY"], "http://127.0.0.1:9")
+        self.assertEqual(result["https_proxy"], result["HTTPS_PROXY"])
+        self.assertEqual(result["NO_PROXY"], "")
+        self.assertEqual(result["no_proxy"], "")
+        self.assertEqual(result["ELM_HOME"], "/prepared")
+        self.assertEqual(original["HTTPS_PROXY"], "http://caller-proxy:1234")
+        self.assertEqual(original["NO_PROXY"], "*")
+
+    def test_old_writable_home_is_refreshed_once_then_keeps_compiled_artifacts(self):
+        with tempfile.TemporaryDirectory() as directory:
+            project = Path(directory) / "project"
+            root = Path(directory) / "prefetch"
+            source = root / "home"
+            source.mkdir(parents=True)
+            (source / "registry.dat").write_text("locked registry")
+            home = Path(cli.state(str(project), "home"))
+            home.mkdir(parents=True)
+            (home / ".source").write_text(str(source.resolve()))
+            (home / "registry.dat").write_text("unlocked registry")
+            (home / "unlocked-package").write_text("old cached package")
+            self.assertEqual(Path(cli.install_home(str(project), str(root))), home)
+            self.assertEqual((home / "registry.dat").read_text(), "locked registry")
+            self.assertFalse((home / "unlocked-package").exists())
+            (home / "compiled-artifact").write_text("reusable")
+            cli.install_home(str(project), str(root))
+            self.assertEqual((home / "compiled-artifact").read_text(), "reusable")
 
 
 class Constraints(unittest.TestCase):
