@@ -19,6 +19,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 REPO = os.environ.get("ELM_PURIFIER_REPO", os.getcwd())
 # The command reads the lock format version from the Nix library.
@@ -74,6 +75,21 @@ class LockedEnvironment(unittest.TestCase):
             (home / "compiled-artifact").write_text("reusable")
             cli.install_home(str(project), str(root))
             self.assertEqual((home / "compiled-artifact").read_text(), "reusable")
+
+    def test_failed_cache_copy_preserves_the_previous_home(self):
+        with tempfile.TemporaryDirectory() as directory:
+            project = Path(directory) / "project"
+            root = Path(directory) / "prefetch"
+            (root / "home").mkdir(parents=True)
+            home = Path(cli.state(str(project), "home"))
+            home.mkdir(parents=True)
+            (home / ".source").write_text("old marker")
+            (home / "compiled-artifact").write_text("keep on failure")
+            with mock.patch.object(cli, "writable_copy", side_effect=OSError("copy failed")):
+                with self.assertRaisesRegex(OSError, "copy failed"):
+                    cli.install_home(str(project), str(root))
+            self.assertEqual((home / "compiled-artifact").read_text(), "keep on failure")
+            self.assertFalse(list(home.parent.glob(".home-*")))
 
 
 class Constraints(unittest.TestCase):

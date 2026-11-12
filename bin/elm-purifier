@@ -55,6 +55,7 @@ path they were run as.
 
 import base64
 import hashlib
+import fcntl
 import json
 import os
 import re
@@ -678,17 +679,44 @@ def state(project, name):
 
 
 def install_home(project, root):
-    """Makes elm-stuff/elm-purifier/home a writable copy of the prefetched
-    package cache, which the compiler writes its build artifacts into."""
+    """Reuse compiled artifacts only for this exact prepared cache and SDK."""
     realized = os.path.realpath(os.path.join(root, "home"))
     home = state(project, "home")
-    marker = os.path.join(home, ".source")
-    # Old writable homes may contain a registry refreshed from the network.
-    identity = realized + "\nlocked-registry-v1\n"
-    if not os.path.exists(marker) or open(marker).read() != identity:
-        writable_copy(realized, home)
-        with open(marker, "w") as f:
-            f.write(identity)
+    parent = os.path.dirname(home)
+    os.makedirs(parent, exist_ok=True)
+    identity = json.dumps({"schema": 1, "root": os.path.realpath(root), "home": realized}, sort_keys=True)
+    # Compilation and LSP startup can both request the first writable home.
+    with open(state(project, "home.lock"), "a") as guard:
+        fcntl.flock(guard, fcntl.LOCK_EX)
+        backup = home + ".previous"
+        if os.path.exists(backup):
+            if not os.path.exists(home):
+                os.replace(backup, home)
+            else:
+                shutil.rmtree(backup)
+        marker = os.path.join(home, ".source")
+        if os.path.exists(marker):
+            with open(marker) as f:
+                if f.read() == identity:
+                    return home
+        staged = tempfile.mkdtemp(prefix=".home-", dir=parent)
+        try:
+            writable_copy(realized, staged)
+            with open(os.path.join(staged, ".source"), "w") as f:
+                f.write(identity)
+            # Keep the previous home until the complete replacement is ready;
+            # recover it if installation fails or a prior process was stopped.
+            if os.path.exists(home):
+                os.replace(home, backup)
+            try:
+                os.replace(staged, home)
+            except BaseException:
+                if os.path.exists(backup):
+                    os.replace(backup, home)
+                raise
+            shutil.rmtree(backup, ignore_errors=True)
+        finally:
+            shutil.rmtree(staged, ignore_errors=True)
     return home
 
 
