@@ -42,7 +42,7 @@ names another.
 The wrapper sets ELM_PURIFIER_TOOLCHAINS (a JSON object from compiler
 version to its `elm`, its `elm-test` executables by the major version of
 elm-explorations/test they run, and the arguments that keep elm-test
-offline; see nix/lib/toolchains.nix), ELM_PURIFIER_ELM_FORMAT and
+offline; see pkgs/build-elm-project/toolchains.nix), ELM_PURIFIER_ELM_FORMAT and
 ELM_PURIFIER_ELM_LANGUAGE_SERVER (the editor tools), ELM_PURIFIER_ELM_JSON
 (the tool that `update` moves versions with), ELM_PURIFIER_LIB
 (the Nix library), ELM_PURIFIER_NIXPKGS (the nixpkgs that library builds
@@ -82,7 +82,9 @@ def note(message):
 
 
 def lock_version():
-    path = os.path.join(os.environ["ELM_PURIFIER_LIB"], "lock-version.nix")
+    path = os.path.join(
+        os.environ["ELM_PURIFIER_LIB"], "..", "..", "lib-overlays", "default", "lock-version.nix"
+    )
     with open(path) as f:
         lines = [line for line in f if not line.lstrip().startswith("#")]
     return int("".join(lines).strip())
@@ -135,7 +137,7 @@ def file_sri(path):
 def content_hash(lock_data):
     """The hash a lockfile records as contentHash: the SHA-256 of the lock
     without that field, in the JSON that Nix's builtins.toJSON writes
-    (keys sorted, no whitespace). nix/lib/lock-hash.nix computes the same."""
+    (keys sorted, no whitespace). lib-overlays/default/lock-hash.nix computes the same."""
     rest = {key: value for key, value in lock_data.items() if key != "contentHash"}
     text = json.dumps(rest, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
     return sri_sha256(text.encode())
@@ -150,7 +152,7 @@ LOCK_HINT = "run `elm-purifier lock` (with --lockfile when the lockfile is kept 
 
 
 def read_lock(path):
-    """The lockfile at `path`, checked as nix/lib/lock.nix checks it, or a
+    """The lockfile at `path`, checked as lib-overlays/default/lock.nix checks it, or a
     message that names the command that writes it again."""
     try:
         data = read_json(path)
@@ -279,7 +281,7 @@ class FreshElmStuff:
 def test_major(elm_json):
     """The major version of elm-explorations/test the tests use: the exact
     version an application names, or the lower bound of the range a
-    package names. None without elm-explorations/test. nix/lib/test-major.nix
+    package names. None without elm-explorations/test. pkgs/build-elm-project/test-major.nix
     applies the same rule."""
     tests = elm_json.get("test-dependencies", {})
     if elm_json["type"] == "application":
@@ -380,7 +382,7 @@ def run_tools(project, elm_json, toolchain, mains, tests, home, offline):
 
 def archive_url(package):
     """The URL of a package's zip: the zipball of its tag on GitHub, which
-    is what the package server names. nix/lib/lock.nix builds the same
+    is what the package server names. lib-overlays/default/lock.nix builds the same
     URL."""
     author, project, version = package.split("/")
     return f"https://github.com/{author}/{project}/zipball/{version}/"
@@ -405,7 +407,7 @@ def record(package):
 def named_packages(elm_json, tests):
     """The packages an application's elm.json names, as author/project/
     version: its dependencies, and its test dependencies when the lock
-    covers the tests. nix/lib/lock.nix reads the same."""
+    covers the tests. lib-overlays/default/lock.nix reads the same."""
     sections = [elm_json["dependencies"]]
     if tests:
         sections.append(elm_json["test-dependencies"])

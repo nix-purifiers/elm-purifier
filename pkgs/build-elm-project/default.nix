@@ -82,7 +82,7 @@ let
   # Where the project is, for messages: the directory in the source, which
   # a developer recognizes, rather than its path in the store.
   location = if subdirectory == "." then "the project directory" else "the directory ${subdirectory}";
-  read = import ./lock.nix { inherit lockFile elmJsonFile location; };
+  read = import ../../lib-overlays/default/lock.nix { inherit lockFile elmJsonFile location; };
   # The lock in memory, checked by the shared library: a lockfile that is
   # not valid for elm.json stops evaluation with its problems.
   lock = purifier.checkLock read.lock;

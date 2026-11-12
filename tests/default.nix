@@ -78,14 +78,14 @@ let
   appLock = builtins.fromJSON (builtins.readFile appLockFile);
   # A lock with its contentHash written again, as an edit by hand that
   # also fixes the hash.
-  rehashed = lock: lock // { contentHash = import ../nix/lib/lock-hash.nix lock; };
+  rehashed = lock: lock // { contentHash = import ../lib-overlays/default/lock-hash.nix lock; };
   lockFileOf = name: lock: builtins.toFile "${name}.lock.json" (builtins.toJSON lock);
   messageCheck =
     name: patterns: cases:
     let
       expression = args: ''
         let
-          standalone = import ${../.}/nix/lib/standalone.nix {
+          standalone = import ${../.}/pkgs/build-elm-project/standalone.nix {
             nixpkgs = ${pkgs.path};
             purifierSrc = ${purifierSrc};
           };
@@ -136,8 +136,8 @@ let
   # nix-build in its place that links it, for the offline check. The
   # sandbox has no network, so the everyday loop there runs on what the
   # prefetch put in the project.
-  prefetched = pkgs.callPackage ../nix/lib/prefetch-tree.nix {
-    home = pkgs.callPackage ../nix/lib/elm-home.nix {
+  prefetched = pkgs.callPackage ../pkgs/build-elm-project/prefetch-tree.nix {
+    home = pkgs.callPackage ../pkgs/build-elm-project/elm-home.nix {
       lockFile = appLockFile;
       elmJsonFile = ./fixtures/app/elm.json;
       inherit purifier;
@@ -336,7 +336,7 @@ in
     } $out
   '';
 
-  # The unit tests of bin/elm-purifier and nix/lib/elm-home.py.
+  # The unit tests of bin/elm-purifier and pkgs/build-elm-project/elm-home.py.
   unit = runCommand "unit" { nativeBuildInputs = [ pkgs.python3 ]; } ''
     ELM_PURIFIER_REPO=${../.} python3 -I -m unittest discover -s ${./unit} -v
     touch $out

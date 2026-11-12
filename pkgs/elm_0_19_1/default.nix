@@ -25,7 +25,7 @@ let
     url = "https://github.com/elm/compiler/archive/2f6dd29258e880dbb7effd57a829a0470d8da48b.tar.gz";
     sha256 = "sha256-6PXucwc9nFN6TxxsSBuwEkKelThtJ6CLshjfsCmHMsE=";
   };
-  reactorHome = callPackage ../../nix/lib/elm-home.nix {
+  reactorHome = callPackage ../build-elm-project/elm-home.nix {
     lockFile = ./reactor.lock.json;
     elmJsonFile = src + "/reactor/elm.json";
     location = "the reactor/ directory of the compiler source";

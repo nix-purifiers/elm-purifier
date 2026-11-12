@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: MIT
-"""Unit tests for bin/elm-purifier and nix/lib/elm-home.py.
+"""Unit tests for bin/elm-purifier and pkgs/build-elm-project/elm-home.py.
 
     python3 -m unittest discover -s tests/unit
 
@@ -23,7 +23,7 @@ from unittest import mock
 
 REPO = os.environ.get("ELM_PURIFIER_REPO", os.getcwd())
 # The command reads the lock format version from the Nix library.
-os.environ.setdefault("ELM_PURIFIER_LIB", os.path.join(REPO, "nix", "lib"))
+os.environ.setdefault("ELM_PURIFIER_LIB", os.path.join(REPO, "pkgs", "build-elm-project"))
 
 
 def load(name, path):
@@ -35,7 +35,7 @@ def load(name, path):
 
 
 cli = load("elm_purifier", "bin/elm-purifier")
-elm_home = load("elm_home", "nix/lib/elm-home.py")
+elm_home = load("elm_home", "pkgs/build-elm-project/elm-home.py")
 
 TOOLCHAINS = {
     "0.19.1": {"elm": "/e1/bin/elm", "elm-test": {"1": "/t9/bin/elm-test", "2": "/t15/bin/elm-test"},
@@ -216,7 +216,7 @@ class LockFormat(unittest.TestCase):
         self.assertNotEqual(cli.content_hash(edited), data["contentHash"])
 
     def test_content_hash_is_the_hash_of_sorted_compact_json(self):
-        # builtins.toJSON in nix/lib/lock-hash.nix writes this text.
+        # builtins.toJSON in lib-overlays/default/lock-hash.nix writes this text.
         data = {"b": 1, "a": {"y": [True, None], "x": "é"}}
         text = '{"a":{"x":"é","y":[true,null]},"b":1}'
         self.assertEqual(cli.content_hash(data), cli.sri_sha256(text.encode()))

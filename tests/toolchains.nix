@@ -8,7 +8,7 @@ let
   };
   toolchains =
     version:
-    import ../nix/lib/toolchains.nix {
+    import ../pkgs/build-elm-project/toolchains.nix {
       elm-purifier = pinned;
       elmPackages.elm = { inherit version; };
     };
