@@ -277,7 +277,9 @@ class ElmRaces(unittest.TestCase):
     Elm compiler, and not for any other failure."""
 
     def tool(self, script):
-        project = tempfile.mkdtemp()
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        project = os.path.join(directory.name, "project")
         os.makedirs(os.path.join(project, "elm-stuff"))
         return project, [sys.executable, "-I", "-c", script]
 

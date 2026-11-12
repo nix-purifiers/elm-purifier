@@ -327,9 +327,10 @@ def run_elm_tool(command, project, env):
             text=True, errors="replace",
         )
         output = []
-        for line in proc.stdout:
-            sys.stderr.write(line)
-            output.append(line)
+        with proc.stdout:
+            for line in proc.stdout:
+                sys.stderr.write(line)
+                output.append(line)
         status = proc.wait()
         if status == 0:
             return
